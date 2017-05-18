@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:util="http://www.springframework.org/schema/util"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:aop="http://www.springframework.org/schema/aop"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-2.0.xsd
+                           http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util-2.0.xsd
+                           http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd
+                           http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop.xsd">
+
+  <context:property-placeholder file-encoding="utf-8" location="classpath*:systemCache.properties" ignore-unresolvable="true"/>
+  <context:property-placeholder file-encoding="utf-8" location="classpath*:log4j.properties" />
+  <!-- 开启使用注解注入bean -->
+  <context:annotation-config/>
+  <!-- 扫描base-package定义的目录，注解注入bean -->
+  <context:component-scan base-package="com.zw"/>
+
+  <bean id="jedisPoolConfig" class="redis.clients.jedis.JedisPoolConfig">
+    <property name="maxWait" value="${redis.pool.maxWait}" />
+    <property name="maxIdle" value="${redis.pool.maxIdle}" />
+    <property name="maxActive" value="${redis.pool.maxActive}" />
+    <property name="testOnBorrow" value="${redis.pool.testOnBorrow}" />
+  </bean>
+
+  <bean id="jedisPool" class="redis.clients.jedis.JedisPool">
+    <constructor-arg index="0" ref="jedisPoolConfig"/>
+    <constructor-arg index="1" value="${redis.server.host}" />
+    <constructor-arg index="2" value="${redis.server.port}" type="int"/>
+    <constructor-arg index="3" value="${redis.server.timeout}" type="int"/>
+  </bean>
+
+  <!-- redis访问类 -->
+  <bean id="redisAccess" class="com.zw.util.RedisAccess">
+    <property name="jedisPool" ref="jedisPool"/>
+  </bean>
+
+  <bean id="cacheAopAspect" class="com.zw.aopaspect.CacheAopAspect">
+    <property name="redisAccess" ref="redisAccess"/>
+  </bean>
+
+  <!-- 这里不使用注解是为了灵活配置要拦截的方法，使用注解的话要修改源代码 -->
+  <!-- 强烈推荐使用xml配置的方式 -->
+  <!-- 拦截所有org.massive.*.service 和 org.massive.*.cache 包下所有的方法 -->
+  <aop:config proxy-target-class="true">
+    <aop:aspect ref="cacheAopAspect">
+      <aop:pointcut id="doCacheAopPointcut"
+                    expression="(execution(* com.zw.service.*.*(..))
+                    or execution(* com.zw.cache.*.*(..)))"/>
+      <aop:around pointcut-ref="doCacheAopPointcut" method="doCacheable"/>
+    </aop:aspect>
+  </aop:config>
+
+<!--  <bean id="cacheAopEvict" class="org.massive.redis.aop.CacheAopEvict">
+    <property name="redisAccess" ref="redisAccess"/>
+  </bean>
+  &lt;!&ndash; 拦截所有org.massive.*.service 和 org.massive.*.cache 包下所有的方法 &ndash;&gt;
+  <aop:config proxy-target-class="true">
+    <aop:aspect ref="cacheAopEvict">
+      <aop:pointcut id="doCacheEvictPointcut"
+                    expression="(execution(* org.massive.*.service.*.*(..))
+                    or execution(* org.massive.*.cache.*.*(..)))"/>
+      <aop:around pointcut-ref="doCacheEvictPointcut" method="doCacheEvict"/>
+    </aop:aspect>
+  </aop:config>-->
+
+</beans>
